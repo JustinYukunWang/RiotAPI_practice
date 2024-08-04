@@ -1,23 +1,43 @@
 import requests
 import json
+import urllib.parse
 
 API_KEY = "RGAPI-e471da40-80fd-4dc5-be05-dbf7dde1b7be"#needs to be updated everytime we log in
-
+REGION = "americas"
 #fetch the puuid inorder to fetch the player info later USING: account: account by riot ID
-puuid_fetch_url = "https://americas.api.riotgames.com/riot/account/v1/accounts/by-riot-id/Voli%20StormValhir/NA1?api_key=" + API_KEY
-resp = requests.get(puuid_fetch_url).json()
-puuid = resp['puuid']
+def get_puuid_using_riotID (gameID, tag):
+    proper_ID = urllib.parse.quote(gameID)#Change the ID and the tag into url-legal format
+    proper_tag = urllib.parse.quote(tag)
+    puuid_fetch_url = ("https://" + REGION + ".api.riotgames.com/riot/account/v1/accounts/by-riot-id/" + 
+                       proper_ID + "/" + proper_tag + "?api_key=" + API_KEY)
+    resp = requests.get(puuid_fetch_url).json()
+    puuid = resp['puuid']
+    return puuid
 
-#fetching player information using puuid 
-player_info_fetch_url = "https://na1.api.riotgames.com/lol/summoner/v4/summoners/by-puuid/2IPkTfIvLAU3O9UZzwENXmJOXnyFESoDK6tf4OW9_-dvgqc9AyQflo3MqDQzccDxFN8-focd7JbuLQ?api_key=" + API_KEY
-player_info = requests.get(player_info_fetch_url).json()
+#Get recent x amount of match history thru PUUID
+def get_match_history(puuid):
+    player_matchHistory_fetch_url = "https://" + REGION + ".api.riotgames.com/lol/match/v5/matches/by-puuid/" + puuid + "/ids?start=0&count=20&api_key=" +  API_KEY
+    matchData = requests.get(player_matchHistory_fetch_url).json()
+    return matchData
 
 
-player_matchHistory_fetch_url = "https://americas.api.riotgames.com/lol/match/v5/matches/by-puuid/" + puuid + "/ids?start=0&count=20&api_key=" +  API_KEY
-matchData = requests.get(player_matchHistory_fetch_url).json()
+def get_aThousand_matches(player_puuid, matchData):
+    matchData += get_match_history(player_puuid)
+    player_list = []
+    for match in matchData:
+        match_data_fetch_url = "https://" + REGION + ".api.riotgames.com/lol/match/v5/matches/" + match + "?api_key=" + API_KEY
+        temp_MatchData = requests.get(match_data_fetch_url).json()
+        player_list += temp_MatchData["metadata"]["participants"]#This is a list of PUUIDs of players in that game
+    for player in player_list:
+        matchData+= get_match_history(player)
+    return matchData
+            
+    
 
-
-
+puuid = get_puuid_using_riotID("Voli StormValhir", "NA1")
+matchData = []
+matchData = list(set(get_aThousand_matches(puuid, matchData)))
+print(len(matchData))
 
 
 with open("matchData.txt", "w") as outfile:
