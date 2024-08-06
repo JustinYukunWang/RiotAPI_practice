@@ -2,7 +2,7 @@ import requests
 import json
 import urllib.parse
 
-API_KEY = "RGAPI-e471da40-80fd-4dc5-be05-dbf7dde1b7be"#needs to be updated everytime we log in
+API_KEY = "RGAPI-ad33e2ab-8eb1-4bb9-8af6-7cfccabe3d7e"#needs to be updated everytime we log in 
 REGION = "americas"
 #fetch the puuid inorder to fetch the player info later USING: account: account by riot ID
 def get_puuid_using_riotID (gameID, tag):
@@ -16,7 +16,7 @@ def get_puuid_using_riotID (gameID, tag):
 
 #Get recent x amount of match history thru PUUID
 def get_match_history(puuid):
-    player_matchHistory_fetch_url = "https://" + REGION + ".api.riotgames.com/lol/match/v5/matches/by-puuid/" + puuid + "/ids?start=0&count=20&api_key=" +  API_KEY
+    player_matchHistory_fetch_url = "https://" + REGION + ".api.riotgames.com/lol/match/v5/matches/by-puuid/" + puuid + "/ids?type=ranked&start=0&count=20&api_key=" +  API_KEY
     matchData = requests.get(player_matchHistory_fetch_url).json()
     return matchData
 
@@ -35,12 +35,14 @@ def get_aThousand_matches(player_puuid, matchData):
     
 
 puuid = get_puuid_using_riotID("Voli StormValhir", "NA1")
+print("Running...")
 matchData = []
 matchData = list(set(get_aThousand_matches(puuid, matchData)))
+
 print(len(matchData))
 
 
-with open("matchData.txt", "w") as outfile:
+with open("matchID(Plat-Emerald).txt", "w") as outfile:
     outfile.write("\n".join(matchData))
     outfile.close()
 
