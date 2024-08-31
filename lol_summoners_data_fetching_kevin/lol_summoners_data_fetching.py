@@ -1,63 +1,51 @@
 import requests
-from tqdm import tqdm
+import asyncio
+import aiohttp
+from tqdm.asyncio import tqdm
 import time
 import pandas as pd
 
-API_KEY = 'RGAPI-86fd201a-4c34-4c31-b2d7-bbf5f87a7f99' #store your riot developer api key here
+API_KEY = 'RGAPI-c64d4d35-f33e-4cc6-8e5a-cee23e6654e3' #store your riot developer api key here
 REGION = 'na1' # store your region code, i.e north america stands for na1
+MATCH_REGION = 'americas'
+matchIDS = []
 
+def get_puuid(SummonerID):
+    url = f'https://{REGION}.api.riotgames.com/lol/summoner/v4/summoners/{SummonerID}?api_key={API_KEY}'
+    response = requests.get(url)
+    if(response.status_code == 200):
+        return response.json()['puuid']
+    else:
+        print(f"Failed to fetch PUUID for SummonerID {SummonerID}: {response.status_code}")
+        return []
+    
 
-def get_diamond_players_info_by_disivion(division, page=1):
-    '''
-    this function returns a list where each element is a dictionary containing player's data
-    i.e:{
-        "leagueId": "0a7e58a5-145b-40f0-abe7-5c4b1fcfc540",
-        "queueType": "RANKED_SOLO_5x5",
-        "tier": "DIAMOND",
-        "rank": "IV",
-        "summonerId": "w9g1K4pjs1XQSVwAycxArZwN1crWmb0Bq0HaRaZcBAc08zZ_",
-        "leaguePoints": 0,
-        "wins": 37,
-        "losses": 23,
-        "veteran": false,
-        "inactive": false,
-        "freshBlood": false,
-        "hotStreak": false
-    }
-    '''
-    url = f'https://{REGION}.api.riotgames.com/lol/league/v4/entries/RANKED_SOLO_5x5/DIAMOND/{division}?page={page}&api_key={API_KEY}'
-    while True:
-        response = requests.get(url)
+def get_match_ids(puuid, type = "ranked", count = 100):
+    url = f'https://{MATCH_REGION}.api.riotgames.com/lol/match/v5/matches/by-puuid/{puuid}/ids?type={type}&start=0&count={count}&api_key={API_KEY}'
+    response = requests.get(url)
+    if(response.status_code == 200):
+        return response.json()
+    else:
+        print(f"Failed to fetch match IDs for PUUID {puuid}: {response.status_code}")
+        return []
+
+def fetch_puuids_and_match_ids(summoner_list):
+    for summoner_dict in tqdm(summoner_list, desc="Updating Summoner Data", bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [%]"):
+        puuid = get_puuid(summoner_dict['summonerId'])
+        if(puuid):
+            summoner_dict['puuid'] = puuid
+            match_list = get_match_ids(puuid)
+            for match in match_list:
+                if match not in matchIDS:
+                    matchIDS.append(match)
+        time.sleep(1)
+    return summoner_list
         
-        if(response.status_code == 200): #request successfully we return the data
-            return response.json()
-        elif (response.status_code == 429): # rate time exceeded
-            retry_time = 10;
-            print(f"Rate limit exceeded retrying after {retry_time} seconds...")
-            time.sleep(retry_time)
-        else:
-            print(f"Error fetching Diamond {division} on page{page}: {response.status_code}")
-            return []
-
-
-
-
-def collect_diamond_players_info():
-    all_diamond_players = []
-    for division in ['I', 'II', 'III', 'IV']:
-        page = 1
-        with tqdm(desc=f'Fetching Diamond {division} players', unit='player') as progress_bar:
-            while True:
-                players = get_diamond_players_info_by_disivion(division, page=page)
-                if players:
-                    all_diamond_players.extend(players)
-                    progress_bar.update(len(players))
-                    page += 1
-                    time.sleep(1)
-                else:
-                    break
-    print(f"\nCollected {len(all_diamond_players)} players from Diamond rank.")
-    return all_diamond_players
+def save_matchIDS_to_csv(matchIDS_list):
+    df = pd.DataFrame(matchIDS, columns = ["Match ID"])
+    file_name = "NA_MatchIDs.csv"
+    df.to_csv(f"{file_name}", index=False)
+    print(f"Saved {len(matchIDS)} Match Ids to '{file_name}'.")
 
 def collect_master_players_info():
     url = f'https://{REGION}.api.riotgames.com/lol/league/v4/masterleagues/by-queue/RANKED_SOLO_5x5?api_key={API_KEY}'
@@ -127,16 +115,23 @@ def collect_challenger_players_info():
         else:
             print(f"Error Fetching Challenger Players: {response.status_code}")
             return []
-
 master_players = collect_master_players_info()
 grandMaster_players = collect_grandMaster_players_info()
 challenger_players = collect_challenger_players_info()
 
+master_players = fetch_puuids_and_match_ids(master_players)
+grandMaster_players = fetch_puuids_and_match_ids(grandMaster_players)
+challenger_players = fetch_puuids_and_match_ids(challenger_players)
+
+save_matchIDS_to_csv(matchIDS)
 
 # Convert lists to DataFrames
 master_df = pd.DataFrame(master_players)
 grandMaster_df = pd.DataFrame(grandMaster_players)
 challenger_df = pd.DataFrame(challenger_players)
+
+
+
 
 # Save each DataFrame to a separate sheet in an Excel file
 with pd.ExcelWriter('league_of_legends_players.xlsx') as writer:
